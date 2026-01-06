@@ -1,0 +1,20 @@
+# Media
+*.mp4
+*.webm
+
+# IDE
+.idea/
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Project Specific (Heavy/Unused)
+models/
+data/
+notebooks/
+scripts/
+
+# Ignore other apps? (User asked to ignore scripts unneeded for surface app)
+# I will leave other apps for now unless explicitly told to ignore specific files in apps/
+# But 'scripts/' directory is definitely ignored.
