@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import os
 import time
+from threading import Lock
 
 try:
     from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, 
@@ -22,7 +23,6 @@ class HailoResults:
 
 class HailoMasks:
     def __init__(self, data, orig_shape):
-        # formatted as (N, H, W)
         self.data = data
         self.orig_shape = orig_shape
 
@@ -32,26 +32,22 @@ class HailoYOLOSeg:
             raise ImportError("Hailo Platform not available.")
         
         self.model_path = model_path
-        self.target = None
-        self.infer_pipeline = None
-        self.network_group = None
+        self.lock = Lock()
         
-        self._load_model()
-
-    def _load_model(self):
+        # Initialize resources
         self.target = VDevice()
         self.hef = HEF(self.model_path)
         
+        # Configure Network Group
         configure_params = ConfigureParams.create_from_hef(
             hef=self.hef, 
             interface=HailoStreamInterface.PCIe
         )
-        
         self.network_groups = self.target.configure(self.hef, configure_params)
         self.network_group = self.network_groups[0]
-        
         self.network_group_params = self.network_group.create_params()
         
+        # Create VStream Params - Input (UINT8 for images) and Output (FLOAT32 for easy math)
         self.input_vstream_params = InputVStreamParams.make(
             self.network_group, 
             format_type=FormatType.UINT8
@@ -61,64 +57,65 @@ class HailoYOLOSeg:
             format_type=FormatType.FLOAT32
         )
         
-        # Identify input info
+        # Get Info
         self.input_vstream_infos = self.hef.get_input_vstream_infos()
         self.output_vstream_infos = self.hef.get_output_vstream_infos()
         
         # Assume single input
         self.input_info = self.input_vstream_infos[0]
-        self.input_shape = self.input_info.shape # (H, W, C) usually
+        self.input_shape = self.input_info.shape 
         self.input_height = self.input_shape[0]
         self.input_width = self.input_shape[1]
-
-        self.infer_pipeline = InferVStreams(
+        
+        # Initialize Pipeline Context
+        self.pipeline = InferVStreams(
             self.network_group, 
             self.input_vstream_params, 
             self.output_vstream_params
         )
-        
+        # Enter the context manually to keep it open
+        self.pipeline.__enter__()
+
+    def __del__(self):
+        # Clean up
+        if hasattr(self, 'pipeline') and self.pipeline:
+             self.pipeline.__exit__(None, None, None)
+
     def __call__(self, image, conf=0.25, iou=0.7):
-        # Preprocess
-        h, w = image.shape[:2]
-        processed_img = cv2.resize(image, (self.input_width, self.input_height))
-        
-        # Inference
-        with self.infer_pipeline as pipeline:
-            data = np.expand_dims(processed_img, axis=0)
-            data = np.ascontiguousarray(data)
-            input_data = {self.input_info.name: data}
+        with self.lock:
+            # Preprocess
+            h, w = image.shape[:2]
+            processed_img = cv2.resize(image, (self.input_width, self.input_height))
             
-            # Debug info
-            # print(f"Inferring with input shape: {data.shape}, dtype: {data.dtype}, size: {data.nbytes}")
+            # Ensure proper contiguous array layout for HailoRT
+            input_tensor = np.expand_dims(processed_img, axis=0)
+            input_tensor = np.ascontiguousarray(input_tensor, dtype=np.uint8)
             
-            results = pipeline.infer(input_data)
-        
+            input_data = {self.input_info.name: input_tensor}
+            
+            # Inference
+            results = self.pipeline.infer(input_data)
+            
+            # Post-process logic...
+            return self._post_process(results, h, w, conf, iou)
+
+    def _post_process(self, results, h, w, conf, iou):
         # Post-process
-        # Results is a dict of name -> numpy array
-        # We need to find the specific outputs for YOLOv8 Seg
-        
-        # Expected outputs:
-        # 1. Main output: (Batch, 4 + 80 + 32, 8400) or similar
-        # 2. Proto output: (Batch, 32, 160, 160)
-        
         preds = None
         protos = None
         
         for name, data in results.items():
-            # data shape might involve batch dim
             if data.ndim == 4:
-                # Likely protos: (Batch, 32, 160, 160)
                  if data.shape[1] == 32:
                      protos = data[0] # remove batch
             elif data.ndim == 3:
-                # Likely preds: (Batch, 116, 8400)
                 preds = data[0] # remove batch
                 
+        # Fallback heuristics
         if preds is None or protos is None:
-            # Fallback heuristics if shapes differ (e.g. transposed)
              for name, data in results.items():
                 d = data[0]
-                if d.size == 32 * 160 * 160: # Protos size
+                if d.size == 32 * 160 * 160: 
                     protos = d.reshape(32, 160, 160)
                 else:
                     preds = d
@@ -127,26 +124,16 @@ class HailoYOLOSeg:
             print("Could not identify YOLOv8 output tensors.")
             return [HailoResults(None, (h, w))]
             
-        # Post Process YOLOv8
-        # preds shape: (116, 8400) usually
-        # Transpose to (8400, 116)
         if preds.shape[0] < preds.shape[1]: 
              preds = preds.T
              
-        # preds: (N, 116)
-        # 0-4: box
-        # 4-84: class scores (assuming 80 classes)
-        # 84-116: mask weights
-        
         boxes = preds[:, 0:4]
         scores = preds[:, 4:84]
         mask_coeffs = preds[:, 84:]
         
-        # Get max score and class
         class_ids = np.argmax(scores, axis=1)
         max_scores = np.max(scores, axis=1)
         
-        # Filter by confidence
         valid_indices = max_scores > conf
         
         boxes = boxes[valid_indices]
@@ -155,22 +142,10 @@ class HailoYOLOSeg:
         mask_coeffs = mask_coeffs[valid_indices]
         
         if len(boxes) == 0:
-            # Return empty structure
-            import torch # Mocking the structure
-            # Wait, user might not have torch if only using Hailo?
-            # Existing specific app was using ultralytics which uses torch, so it's fine.
-            # But let's try to stick to numpy if possible.
-            # The app expects results[0].masks.data as a tensor/array.
             return [HailoResults(None, (h, w))]
             
-        # Convert boxes (cx, cy, w, h) to (x1, y1, x2, y2)
-        # Coordinates are relative to input_width/height? Usually YOLO outputs absolute pixels if not normalized.
-        # But commonly raw models output absolute pixels for 640x640.
-        
-        # However, let's verify NMS.
-        # We need NMS.
         indices = cv2.dnn.NMSBoxes(
-            bboxes=boxes.tolist(), # expects [x,y,w,h] usually for opencv NMS
+            bboxes=boxes.tolist(), 
             scores=scores.tolist(),
             score_threshold=conf,
             nms_threshold=iou
@@ -180,65 +155,35 @@ class HailoYOLOSeg:
         
         if len(indices) > 0:
             indices = indices.flatten()
-            
-            # Process masks for selected indices
             for i in indices:
-                # 1. Get mask coeffs (1, 32)
                 coeffs = mask_coeffs[i]
+                box = boxes[i]
                 
-                # 2. Get bounding box for cropping later
-                box = boxes[i] # cx, cy, w, h
-                
-                # 3. Matrix multiply with protos (32, 160, 160)
-                # coeffs: (32,)
-                # protos: (32, 160*160) or keep 2d 
-                
-                # mask = coeffs @ protos.reshape(32, -1)
-                # mask = mask.reshape(160, 160)
                 mask = np.matmul(coeffs, protos.reshape(32, -1)).reshape(160, 160)
-                
-                # Sigmoid
                 mask = 1 / (1 + np.exp(-mask))
                 
-                # Resize mask to input size (640, 640)
-                # Then crop/mask with bbox
-                # Actually YOLOv8 approach:
-                # Resize mask to (640, 640)
                 full_mask = cv2.resize(mask, (self.input_width, self.input_height))
-                
-                # Binary threshold
                 full_mask = (full_mask > 0.5).astype(np.uint8)
                 
-                # Crop to bbox
-                # box is cx, cy, w, h
                 bx, by, bw, bh = box
                 x1 = int(bx - bw/2)
                 y1 = int(by - bh/2)
                 x2 = int(bx + bw/2)
                 y2 = int(by + bh/2)
                 
-                # Clip
                 x1 = max(0, x1); y1 = max(0, y1)
                 x2 = min(self.input_width, x2); y2 = min(self.input_height, y2)
                 
-                # Create final mask for this instance
                 instance_mask = np.zeros((self.input_height, self.input_width), dtype=np.uint8)
                 instance_mask[y1:y2, x1:x2] = full_mask[y1:y2, x1:x2]
                 
-                # Now resize instance_mask to original image size
                 final_instance_mask = cv2.resize(instance_mask, (w, h), interpolation=cv2.INTER_NEAREST)
                 final_masks.append(final_instance_mask)
         
         if not final_masks:
             return [HailoResults(None, (h, w))]
             
-        # Convert list of masks to (N, H, W) array
         masks_array = np.array(final_masks)
-        
-        # Return wrapper
-        # We also need a torch-like wrapper if the downstream code expects .cpu().numpy()
-        # The existing code: `masks = results[0].masks.data.cpu().numpy()`
-        # So `masks.data` should be an object with .cpu() method or we should mock it.
         
         class TensorMock:
             def __init__(self, array):
@@ -259,12 +204,19 @@ def get_model(model_path):
         
     try:
         print(f"Loading Hailo HEF from: {model_path}")
+        # Clean up old model if exists
+        if CURRENT_MODEL is not None:
+             del CURRENT_MODEL
+             CURRENT_MODEL = None
+             
         model = HailoYOLOSeg(model_path)
         CURRENT_MODEL = model
         CURRENT_MODEL_PATH = model_path
         return model
     except Exception as e:
         print(f"Error loading model: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def find_longest_vertical_run(mask):
@@ -332,13 +284,11 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
         surface_map = cv2.resize(surface_map, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
 
     # Run Inference
-    # Model is our HailoYOLOSeg instance
     results = model(image)
     
     # Check for masks
-    # Our mocked result: results[0].masks.data -> wrapper -> .cpu().numpy()
     if results[0].masks.data is None:
-        return image, None, "No flood detected."
+        return image, None, "No flood detected or Inference Failed."
         
     # Aggregate Flood Mask
     masks = results[0].masks.data.cpu().numpy()
@@ -347,7 +297,6 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
         return image, None, "No flood detected."
 
     # Convert masks to single mask
-    # Logic from original:
     if masks.shape[1:] != image.shape[:2]:
         full_mask = np.zeros(image.shape[:2], dtype=np.uint8)
         for m in masks:
