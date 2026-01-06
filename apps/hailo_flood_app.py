@@ -84,7 +84,13 @@ class HailoYOLOSeg:
         
         # Inference
         with self.infer_pipeline as pipeline:
-            input_data = {self.input_info.name: np.expand_dims(processed_img, axis=0)}
+            data = np.expand_dims(processed_img, axis=0)
+            data = np.ascontiguousarray(data)
+            input_data = {self.input_info.name: data}
+            
+            # Debug info
+            # print(f"Inferring with input shape: {data.shape}, dtype: {data.dtype}, size: {data.nbytes}")
+            
             results = pipeline.infer(input_data)
         
         # Post-process

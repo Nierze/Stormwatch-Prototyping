@@ -1,4 +1,7 @@
 gradio
 ultralytics
 opencv-python
-numpy
+numpy<2
+# hailo_platform is required for hailo_flood_app.py but is not on PyPI.
+# Please install it via 'sudo apt install hailo-all' (RPi) or from the Hailo Developer Zone.
+# hailo_platform
