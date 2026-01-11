@@ -422,7 +422,7 @@ def estimate_flood_action(channel, invert, str_thresh, black_exp, min_w, deep_th
         frame_rgb, gt_normal_rgb, YOLO_MODEL_PATH, channel, invert, str_thresh, black_exp, min_w, deep_thresh
     )
     
-    return overlay, masked_depth, info
+    return frame_rgb, overlay, masked_depth, info
 
 # --- GUI ---
 def launch_app():
@@ -454,6 +454,7 @@ def launch_app():
                 est_btn = gr.Button("Estimate Flood", variant="primary")
                 
                 with gr.Row():
+                    out_original = gr.Image(label="Original Capture")
                     out_overlay = gr.Image(label="Flood Overlay")
                     out_masked = gr.Image(label="Masked Depth")
                 
@@ -462,7 +463,7 @@ def launch_app():
                 est_btn.click(
                     estimate_flood_action, 
                     inputs=[channel, invert, str_thresh, black_exp, min_w, deep_thresh],
-                    outputs=[out_overlay, out_masked, out_info]
+                    outputs=[out_original, out_overlay, out_masked, out_info]
                 )
 
     demo.launch(server_name="0.0.0.0")
