@@ -272,6 +272,10 @@ def main():
     if last_frame is None:
         print("Failed to reshape frame (unknown format).")
         return
+
+    # Flip image (camera is upside down)
+    print("Flipping image 180 degrees...")
+    last_frame = cv2.flip(last_frame, -1)
         
     input_path = os.path.join(OUTPUT_DIR, "capture_input.png")
     cv2.imwrite(input_path, last_frame)
