@@ -53,6 +53,7 @@ def load_model():
     return model, cfg
 
 def ensure_frame_shape(frame):
+    print(f"DEBUG: Frame shape check. Input shape: {frame.shape}")
     # Handle flattened frames (RPi libcamerify/OpenCV quirk)
     # Check if frame is (1, N, 3) or (N, 3) - typically (1, W*H, 3) from cv2
     if len(frame.shape) == 3 and frame.shape[0] == 1 and frame.shape[1] > 10000:
@@ -66,8 +67,23 @@ def ensure_frame_shape(frame):
         ]
         for w_cand, h_cand in resolutions:
             if w_cand * h_cand == flat_size:
-                # print(f"Reshaping flattened frame from {frame.shape} to ({h_cand}, {w_cand}, 3)")
+                print(f"DEBUG: Reshaping flattened frame from {frame.shape} to ({h_cand}, {w_cand}, 3)")
                 return frame.reshape((h_cand, w_cand, 3))
+    
+    # Also check if it is 2D (1, N*3)
+    if len(frame.shape) == 2 and frame.shape[0] == 1 and frame.shape[1] > 30000:
+         flat_size = frame.shape[1] // 3
+         resolutions = [
+            (1280, 720),   # 921600
+            (1920, 1080),  # 2073600
+            (640, 480),    # 307200
+            (800, 600),    # 480000
+            (1024, 768)    # 786432
+        ]
+         for w_cand, h_cand in resolutions:
+            if w_cand * h_cand == flat_size:
+                 print(f"DEBUG: Reshaping flattened 2D frame from {frame.shape} to ({h_cand}, {w_cand}, 3)")
+                 return frame.reshape((h_cand, w_cand, 3))
     return frame
 
 def process_frame(model, cfg, frame):
