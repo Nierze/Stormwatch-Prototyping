@@ -115,6 +115,28 @@ def process_frame(model, cfg, frame):
             
     return frame
 
+def open_camera():
+    # Try different indices and backends
+    indices = [0, 1, -1]
+    backends = [cv2.CAP_ANY, cv2.CAP_V4L2]
+    
+    for backend in backends:
+        for index in indices:
+            print(f"Trying camera index {index} with backend {backend}...")
+            cap = cv2.VideoCapture(index, backend)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret:
+                    print(f"Success! Camera found at index {index}.")
+                    return cap
+                else:
+                    print(f"Opened index {index} but failed to read frame.")
+                    cap.release()
+            else:
+                 print(f"Failed to open index {index}.")
+                 
+    return None
+
 def main():
     try:
         model, cfg = load_model()
@@ -122,10 +144,15 @@ def main():
         print(f"Failed to load model: {e}")
         return
 
-    print("Opening camera (0)...")
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Cannot open camera")
+    print("Searching for available camera...")
+    cap = open_camera()
+    
+    if cap is None:
+        print("Error: No working camera found.")
+        print("Troubleshooting tips for Raspberry Pi:")
+        print("1. Ensure camera is connected.")
+        print("2. Try running with 'libcamerify': libcamerify python apps/metric3d_live_app.py")
+        print("3. Check 'raspi-config' to enable legacy camera support if using an older camera module.")
         return
         
     print("Starting video loop. Press 'q' to quit.")
@@ -136,12 +163,8 @@ def main():
             print("Can't receive frame (stream end?). Exiting ...")
             break
             
-        # Optional: scale down frame for speed before processing if needed
-        # frame_small = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)
-        
         output = process_frame(model, cfg, frame)
         
-        # Stack vertically or horizontally? Let's just show output
         # Combined view
         vis = np.hstack((frame, output))
         cv2.imshow('Metric3D Surface Normal Live (Left: Input, Right: Prediction)', vis)
