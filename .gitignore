@@ -14,7 +14,10 @@ models/
 data/
 notebooks/
 scripts/
-
+Surface Estimation/Metric3D/venv
 # Ignore other apps? (User asked to ignore scripts unneeded for surface app)
 # I will leave other apps for now unless explicitly told to ignore specific files in apps/
 # But 'scripts/' directory is definitely ignored.
+
+
+Surface Estimation/Metric3D/weight/metric_depth_vit_small_800k.pth

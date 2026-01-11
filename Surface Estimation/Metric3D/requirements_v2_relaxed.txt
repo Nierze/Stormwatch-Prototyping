@@ -1,0 +1,13 @@
+torch
+torchvision
+opencv-python
+numpy
+Pillow
+timm
+mmengine
+tqdm
+PyYAML
+scipy
+iopath
+addict
+yapf

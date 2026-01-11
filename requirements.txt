@@ -5,3 +5,16 @@ numpy<2
 # hailo_platform is required for hailo_flood_app.py but is not on PyPI.
 # Please install it via 'sudo apt install hailo-all' (RPi) or from the Hailo Developer Zone.
 # hailo_platform
+
+# Metric3D Requirements
+torch
+torchvision
+Pillow
+timm
+mmengine
+tqdm
+PyYAML
+scipy
+iopath
+addict
+yapf

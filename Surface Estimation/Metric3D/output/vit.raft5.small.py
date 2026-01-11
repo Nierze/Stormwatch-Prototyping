@@ -1,0 +1,93 @@
+batch_size = 1
+batchsize_per_gpu = 1
+cudnn_benchmark = True
+data_basic = dict(
+    canonical_space=dict(focal_length=1000.0, img_size=(
+        540,
+        960,
+    )),
+    clip_depth_range=(
+        0.1,
+        200,
+    ),
+    crop_size=(
+        616,
+        1064,
+    ),
+    depth_normalize=(
+        0.1,
+        200,
+    ),
+    depth_range=(
+        0,
+        1,
+    ),
+    vit_size=(
+        616,
+        1064,
+    ))
+distributed = False
+load_from = './weight/metric_depth_vit_small_800k.pth'
+log_file = './output/20260111_131043.log'
+max_value = 200
+model = dict(
+    backbone=dict(
+        drop_path_rate=0.0,
+        out_channels=[
+            384,
+            384,
+            384,
+            384,
+        ],
+        prefix='backbones.',
+        type='vit_small_reg'),
+    decode_head=dict(
+        decoder_channels=[
+            48,
+            96,
+            192,
+            384,
+            384,
+        ],
+        detach=False,
+        feature_channels=[
+            96,
+            192,
+            384,
+            768,
+        ],
+        hidden_channels=[
+            48,
+            48,
+            48,
+            48,
+        ],
+        in_channels=[
+            384,
+            384,
+            384,
+            384,
+        ],
+        iters=4,
+        n_downsample=2,
+        n_gru_layers=3,
+        num_register_tokens=4,
+        prefix='decode_heads.',
+        slow_fast_gru=True,
+        type='RAFTDepthNormalDPT5',
+        up_scale=7,
+        use_cls_token=True),
+    type='DensePredModel')
+show_dir = './output'
+test_metrics = [
+    'abs_rel',
+    'rmse',
+    'silog',
+    'delta1',
+    'delta2',
+    'delta3',
+    'rmse_log',
+    'log10',
+    'sq_rel',
+]
+thread_per_gpu = 1
