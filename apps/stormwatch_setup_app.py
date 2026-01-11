@@ -372,6 +372,18 @@ def setup_ground_truth_action():
     gt_normal_rgb = cv2.cvtColor(gt_normal, cv2.COLOR_BGR2RGB)
     return gt_normal_rgb, "Success: Ground Truth Saved"
 
+def retrieve_ground_truth_action():
+    gt_path = os.path.join(GROUND_TRUTH_DIR, GT_FILENAME)
+    if not os.path.exists(gt_path):
+        return None, "Status: No Ground Truth file found."
+    
+    gt_normal = cv2.imread(gt_path)
+    if gt_normal is None:
+        return None, "Status: Error reading Ground Truth file."
+        
+    gt_normal_rgb = cv2.cvtColor(gt_normal, cv2.COLOR_BGR2RGB)
+    return gt_normal_rgb, "Status: Retrieved current Ground Truth."
+
 def estimate_flood_action(channel, invert, str_thresh, black_exp, min_w, deep_thresh):
     # 1. Capture Live Image
     frame, msg = capture_image_from_camera()
@@ -433,11 +445,15 @@ def launch_app():
             # TAB 1: Setup Ground Truth
             with gr.Tab("Setup Surface Ground Truth"):
                 gr.Markdown("Capture a baseline image to generate the Surface Normal Ground Truth.")
-                setup_btn = gr.Button("Setup Surface Ground Truth", variant="primary")
+                gr.Markdown("Capture a baseline image to generate the Surface Normal Ground Truth.")
+                with gr.Row():
+                    setup_btn = gr.Button("Setup Surface Ground Truth", variant="primary")
+                    retrieve_btn = gr.Button("Retrieve Current Ground Truth")
                 gt_output = gr.Image(label="Ground Truth Result (Saved)", type="numpy")
                 status_txt = gr.Textbox(label="Status")
                 
                 setup_btn.click(setup_ground_truth_action, outputs=[gt_output, status_txt])
+                retrieve_btn.click(retrieve_ground_truth_action, outputs=[gt_output, status_txt])
                 
             # TAB 2: Estimate Flood
             with gr.Tab("Estimate Flood"):
