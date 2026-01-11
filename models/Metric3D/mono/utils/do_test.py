@@ -97,11 +97,6 @@ def resize_for_input(image, output_shape, intrinsic, canonical_shape, to_canonic
     to_scale_ratio = min(resize_ratio_h, resize_ratio_w)
 
     resize_ratio = to_canonical_ratio * to_scale_ratio
-    
-    print(f"DEBUG resize_for_input: h={h}, w={w}")
-    print(f"DEBUG output_shape={output_shape}")
-    print(f"DEBUG canonical_shape={canonical_shape}")
-    print(f"DEBUG resize_ratio={resize_ratio}")
 
     reshape_h = int(resize_ratio * h)
     reshape_w = int(resize_ratio * w)

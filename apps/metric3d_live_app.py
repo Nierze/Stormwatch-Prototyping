@@ -56,6 +56,28 @@ def process_frame(model, cfg, frame):
     # Input expected to be RGB
     rgb_origin = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
+    # Handle flattened frames (RPi libcamerify/OpenCV quirk)
+    if rgb_origin.shape[0] == 1 and rgb_origin.shape[1] > 10000:
+        flat_size = rgb_origin.shape[1]
+        # Check common resolutions
+        resolutions = [
+            (1280, 720),   # 921600
+            (1920, 1080),  # 2073600
+            (640, 480),    # 307200
+            (800, 600),    # 480000
+            (1024, 768)    # 786432
+        ]
+        reshaped = False
+        for w_cand, h_cand in resolutions:
+            if w_cand * h_cand == flat_size:
+                print(f"Reshaping flattened frame from {rgb_origin.shape} to ({h_cand}, {w_cand}, 3)")
+                rgb_origin = rgb_origin.reshape((h_cand, w_cand, 3))
+                reshaped = True
+                break
+        if not reshaped:
+            # Fallback: assume square-ish or just fail later
+            pass
+
     # Create dummy intrinsics: [fx, fy, cx, cy]
     h, w = rgb_origin.shape[:2]
     intrinsic = [1000.0, 1000.0, w / 2, h / 2]
