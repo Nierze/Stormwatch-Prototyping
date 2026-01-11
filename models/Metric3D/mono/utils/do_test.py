@@ -194,6 +194,11 @@ def transform_test_data_scalecano(rgb, intrinsic, data_basic):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     rgb = torch.from_numpy(rgb.transpose((2, 0, 1))).float()
     rgb = torch.div((rgb - mean), std)
+    # Clamp inputs to avoid numerical instability on CPU
+    rgb = torch.clamp(rgb, min=-10.0, max=10.0)
+    if torch.isnan(rgb).any():
+        print("DEBUG: NaNs detected in input RGB after normalization!")
+        rgb = torch.nan_to_num(rgb, nan=0.0)
     rgb = rgb.to(device)
     
     cam_model = torch.from_numpy(cam_model.transpose((2, 0, 1))).float()
