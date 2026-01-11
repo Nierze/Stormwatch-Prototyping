@@ -52,14 +52,11 @@ def load_model():
     model = model.to(DEVICE).eval()
     return model, cfg
 
-def process_frame(model, cfg, frame):
-    # Input expected to be RGB
-    rgb_origin = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
+def ensure_frame_shape(frame):
     # Handle flattened frames (RPi libcamerify/OpenCV quirk)
-    if rgb_origin.shape[0] == 1 and rgb_origin.shape[1] > 10000:
-        flat_size = rgb_origin.shape[1]
-        # Check common resolutions
+    # Check if frame is (1, N, 3) or (N, 3) - typically (1, W*H, 3) from cv2
+    if len(frame.shape) == 3 and frame.shape[0] == 1 and frame.shape[1] > 10000:
+        flat_size = frame.shape[1]
         resolutions = [
             (1280, 720),   # 921600
             (1920, 1080),  # 2073600
@@ -67,17 +64,16 @@ def process_frame(model, cfg, frame):
             (800, 600),    # 480000
             (1024, 768)    # 786432
         ]
-        reshaped = False
         for w_cand, h_cand in resolutions:
             if w_cand * h_cand == flat_size:
-                print(f"Reshaping flattened frame from {rgb_origin.shape} to ({h_cand}, {w_cand}, 3)")
-                rgb_origin = rgb_origin.reshape((h_cand, w_cand, 3))
-                reshaped = True
-                break
-        if not reshaped:
-            # Fallback: assume square-ish or just fail later
-            pass
+                # print(f"Reshaping flattened frame from {frame.shape} to ({h_cand}, {w_cand}, 3)")
+                return frame.reshape((h_cand, w_cand, 3))
+    return frame
 
+def process_frame(model, cfg, frame):
+    # Input expected to be RGB
+    rgb_origin = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
     # Create dummy intrinsics: [fx, fy, cx, cy]
     h, w = rgb_origin.shape[:2]
     intrinsic = [1000.0, 1000.0, w / 2, h / 2]
@@ -184,6 +180,8 @@ def main():
         if not ret:
             print("Can't receive frame (stream end?). Exiting ...")
             break
+        
+        frame = ensure_frame_shape(frame)
             
         output = process_frame(model, cfg, frame)
         
