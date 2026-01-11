@@ -25,7 +25,28 @@ except:
 # Global variables
 model = None
 cfg = None
-CHECKPOINT_PATH = "/home/nirze/.cache/torch/hub/checkpoints/metric_depth_vit_large_800k.pth"
+
+# Checkpoint handling
+CHECKPOINT_URL = "https://huggingface.co/JUGGHM/Metric3D/resolve/main/metric_depth_vit_large_800k.pth"
+CHECKPOINT_DIR = os.path.join(os.path.expanduser("~"), ".cache", "torch", "hub", "checkpoints")
+CHECKPOINT_FILENAME = "metric_depth_vit_large_800k.pth"
+CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, CHECKPOINT_FILENAME)
+
+def ensure_checkpoint_exists():
+    if not os.path.exists(CHECKPOINT_PATH):
+        print(f"Checkpoint not found at {CHECKPOINT_PATH}. Downloading...")
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+        try:
+            torch.hub.download_url_to_file(CHECKPOINT_URL, CHECKPOINT_PATH)
+            print("Download complete.")
+        except Exception as e:
+            print(f"Error downloading checkpoint: {e}")
+            raise e
+    else:
+        print(f"Checkpoint found at {CHECKPOINT_PATH}")
+
+ensure_checkpoint_exists()
+
 CONFIG_PATH = os.path.join(METRIC3D_DIR, "mono/configs/HourglassDecoder/vit.raft5.large.py")
 
 # --- Helper Functions from mono/utils/do_test_cpu.py ---
