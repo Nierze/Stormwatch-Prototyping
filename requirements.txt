@@ -18,3 +18,4 @@ scipy
 iopath
 addict
 yapf
+mmcv-lite

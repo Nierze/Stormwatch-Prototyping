@@ -1,15 +1,27 @@
 import importlib 
+import importlib
 import torch
 import torch.distributed as dist
 from .avg_meter import AverageMeter
 from collections import defaultdict, OrderedDict
 import os
 import socket
-from mmcv.utils import collect_env as collect_base_env
+try:
+    from mmcv.utils import collect_env as collect_base_env
+except ImportError:
+    try:
+        from mmengine.utils import get_git_hash
+        from mmengine.utils import dl_utils
+        def collect_base_env():
+            return dl_utils.collect_env()
+    except ImportError:
+        def collect_base_env():
+            return {}
+
 try:
     from mmcv.utils import get_git_hash
-except:
-    from mmengine import get_git_hash
+except ImportError:
+    from mmengine.utils import get_git_hash
 #import mono.mmseg as mmseg
 import mmseg
 import time
