@@ -19,3 +19,4 @@ iopath
 addict
 yapf
 mmcv-lite
+termcolor
