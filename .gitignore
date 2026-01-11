@@ -10,7 +10,9 @@ __pycache__/
 *.pyc
 
 # Project Specific (Heavy/Unused)
-models/
+models/*
+!models/Metric3D/
+models/Metric3D/weight/
 data/
 notebooks/
 scripts/
