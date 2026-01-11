@@ -191,12 +191,13 @@ def transform_test_data_scalecano(rgb, intrinsic, data_basic):
     # label scale factor
     label_scale_factor = cano_label_scale_ratio * resize_label_scale_ratio
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     rgb = torch.from_numpy(rgb.transpose((2, 0, 1))).float()
     rgb = torch.div((rgb - mean), std)
-    rgb = rgb.cuda()
+    rgb = rgb.to(device)
     
     cam_model = torch.from_numpy(cam_model.transpose((2, 0, 1))).float()
-    cam_model = cam_model[None, :, :, :].cuda()
+    cam_model = cam_model[None, :, :, :].to(device)
     cam_model_stacks = [
         torch.nn.functional.interpolate(cam_model, size=(cam_model.shape[2]//i, cam_model.shape[3]//i), mode='bilinear', align_corners=False)
         for i in [2, 4, 8, 16, 32]

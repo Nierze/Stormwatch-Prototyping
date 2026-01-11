@@ -20,3 +20,5 @@ addict
 yapf
 mmcv-lite
 termcolor
+html4vision
+plyfile
