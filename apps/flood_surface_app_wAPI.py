@@ -12,27 +12,41 @@ CURRENT_MODEL_PATH = None
 
 def send_flood_report(api_url, api_key, severity, details):
     """
-    Sends a flood report to the API.
+    Sends a flood report to the API matching the required schema.
     """
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
+    # Extract numeric value for the payload
+    # details['relative_height'] is 0.0-1.0
+    val_percent = details.get('relative_height', 0.0) * 100
+    
     payload = {
-        "severity": severity,
-        "timestamp": datetime.now().isoformat(),
-        "details": details
+        "readingType": "water_level",
+        "value": round(val_percent, 2),
+        "unit": "%",
+        "metadata": {
+            "status": severity.upper(), # LOW, MEDIUM, HIGH
+            "sensor_id": "STORMWATCH_CAM_01",
+            "max_vertical_px": details.get('max_vertical', 0),
+            "timestamp": datetime.now().isoformat()
+        }
     }
     
     try:
         response = requests.post(api_url, json=payload, headers=headers)
         if response.status_code == 200 or response.status_code == 201:
-            return f"API Status: Success ({response.status_code})"
+            try:
+                resp_json = response.json()
+                return f"API Success: Reading ID {resp_json.get('readingId')}"
+            except:
+                return f"API Success ({response.status_code})"
         else:
-            return f"API Status: Failed ({response.status_code}) - {response.text[:50]}"
+            return f"API Failed ({response.status_code}): {response.text}"
     except Exception as e:
-        return f"API Status: Error - {str(e)}"
+        return f"API Error: {str(e)}"
 CURRENT_MODEL = None
 CURRENT_MODEL_PATH = None
 
@@ -328,7 +342,7 @@ def launch_app():
                 
                 gr.Markdown("### API Configuration")
                 api_key_input = gr.Textbox(label="API Key", value="sk_1768192573271_2bhobz0gvp7")
-                api_url_input = gr.Textbox(label="API URL", value="https://www.stormwatch.app/docs")
+                api_url_input = gr.Textbox(label="API URL", value="https://api.stormwatch.app/v1/readings")
                 
                 submit_btn = gr.Button("Estimate Flood & Send API Report")
             
