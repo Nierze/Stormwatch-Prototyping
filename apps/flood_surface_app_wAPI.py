@@ -160,7 +160,8 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     results = model(image)
     
     if not results[0].masks:
-        return image, None, "No flood detected."
+        api_status = send_flood_report(api_url, api_key, "LOW", {"relative_height": 0.0, "max_vertical": 0})
+        return image, None, f"No flood detected. {api_status}"
 
     # Aggregate Flood Mask
     masks = results[0].masks.data.cpu().numpy()
