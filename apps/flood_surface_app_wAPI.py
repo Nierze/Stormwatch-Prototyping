@@ -47,8 +47,6 @@ def send_flood_report(api_url, api_key, severity, details):
             return f"API Failed ({response.status_code}): {response.text}"
     except Exception as e:
         return f"API Error: {str(e)}"
-CURRENT_MODEL = None
-CURRENT_MODEL_PATH = None
 
 def get_model(model_path):
     global CURRENT_MODEL, CURRENT_MODEL_PATH
@@ -72,17 +70,9 @@ def find_longest_vertical_run(mask):
     Finds the longest vertical run of True values in a boolean 2D mask.
     Returns (x, start_y, end_y) or None if no run found.
     """
-    # Simply iterate columns. For a typical image size, this is fast enough in numpy-ish ways?
-    # Actually, pure python column loop with numpy ops is okay-ish.
-    # But let's try a properly vectorized approach per column or just efficient logic.
-    
     h, w = mask.shape
     max_len = 0
     best_run = None
-    
-    # We can perform a column-wise run-length encoding.
-    # To do this efficiently without too many loops:
-    # We can iterate columns (which is O(W)) and use np.diff for starts/ends.
     
     for x in range(w):
         col = mask[:, x]
@@ -136,19 +126,12 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     if image is None or surface_map is None:
         return None, None, "Please provide both images."
 
-    # SMART UPSCALING
-    # "make sure both images are upscayled to same size before any inference or intersection happens"
-    # We want to preserve the highest detail.
+    # Resize both images to the maximum dimensions found to preserve detail
     h1, w1 = image.shape[:2]
     h2, w2 = surface_map.shape[:2]
     
     target_w = max(w1, w2)
     target_h = max(h1, h2)
-    
-    # Resize both if needed (forcing specific size might distort aspect ratio if they differ, 
-    # but we assume they are pairs. Typically we align to the largest dimension).
-    # To be safe against aspect ratio mismatch, we usually resize to the one with largest area or specific one.
-    # Let's assume they are paired and just resize to the largest dimensions found.
     
     if (w1, h1) != (target_w, target_h):
         image = cv2.resize(image, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
@@ -192,25 +175,16 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     # Mask to flood area only
     masked_values = raw_values.astype(np.float32)
     
-    # INTERSECTION VISUALIZATION
-    # "If the flood mask intersects with the [non-surface], I want to see the color change"
-    
-    # 1. Normalize
+    # Normalize depth values
     abs_depths = masked_values / 255.0
     if invert_depth:
         abs_depths = 1.0 - abs_depths
         
-    # 2. Define Intersection Areas
-    # Zone 1: Flood on Surface (Ground) -> safe/low -> Green
-    # Zone 2: Flood on Non-Surface (Intersection with Structure) -> critical -> Red
-    
+    # Define intersection areas
     surface_overlap = (abs_depths <= structure_thresh) & (flood_mask == 1)
     structure_overlap = (abs_depths > structure_thresh) & (flood_mask == 1)
     
-    # Zones
-    
-    # Expand Critical Area (Dilation)
-    # "for every pureblack intersected area, I want the neighboring n pixel to be black"
+    # Expand critical area (dilation)
     if black_expansion > 0:
         kernel_size = int(black_expansion)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size*2+1, kernel_size*2+1))
@@ -219,18 +193,11 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
         dilated_structure = cv2.dilate(structure_mask_uint8, kernel, iterations=1)
         # Update the boolean mask
         structure_overlap = (dilated_structure == 1)
-        # Note: This might expand OUTSIDE the flood mask. 
-        # User said "neighboring n pixel to be black".
-        # If we want it constrained to flood, we'd AND it with flood_mask.
-        # But usually "expand danger zone" implies the danger is bigger.
-        # Let's constrain it to the Flood Mask? 
-        # "I want the neighboring n pixel to be black" - logically if the flood is there.
-        # If the flood is NOT there, we shouldn't paint it black (it's not flood).
-        # So we constrain to flood_mask.
+        
+        # Constrain expanded area to the flood mask
         structure_overlap = structure_overlap & (flood_mask == 1)
 
-    # Apply Overlay
-    # "place the flood segmentation mask on the depth map for the results"
+    # Apply overlay
     overlay = surface_map.copy()
     
     # Green for Surface Overlap (Flood on Ground)
@@ -243,7 +210,6 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     overlay[structure_overlap] = np.array([0, 0, 0])
 
     # Find and draw the longest vertical line
-    # structure_overlap is the boolean mask of black areas
     
     # Filter by minimum width if needed
     if min_width > 1:
@@ -263,13 +229,7 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     
     if longest_run:
         lx, ly_start, ly_end = longest_run
-        # Draw red line
-        # Note: ly_end is exclusive index from diff, but for drawing we want the pixel coordinates.
-        # So we draw from (lx, ly_start) to (lx, ly_end - 1)
-        # color=(0, 0, 255) because usually OpenCV is BGR. Wait. 
-        # The app reads "Original RGB Flood Image" via gr.Image(type="numpy").
-        # Gradio returns RGB.
-        # So Red is (255, 0, 0).
+        # Draw red line (RGB format)
         cv2.line(overlay, (lx, ly_start), (lx, ly_end - 1), (255, 0, 0), 3)
     
     # Statistics
@@ -282,7 +242,6 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
     img_h = image.shape[0]
     
     # Calculate flood mask height
-    # Find rows where flood exists
     flood_rows = np.where(np.any(flood_mask > 0, axis=1))[0]
     
     if len(flood_rows) > 0:

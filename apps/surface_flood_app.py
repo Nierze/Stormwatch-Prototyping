@@ -304,7 +304,7 @@ def launch_app():
             outputs=[output_img, masked_depth_img, stats]
         )
     
-    demo.launch(share=False, server_name="0.0.0.0")
+    demo.launch(share=False)
 
 if __name__ == "__main__":
     launch_app()
