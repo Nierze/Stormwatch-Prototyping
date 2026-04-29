@@ -101,7 +101,7 @@ def find_longest_vertical_run(mask):
     return best_run
 
 
-def process_flood_surface(image, surface_map, model_path, channel_mode, invert_depth, structure_thresh, black_expansion, min_width, deep_threshold, api_key, api_url):
+def process_flood_surface(image, surface_map, model_path, confidence_thresh, channel_mode, invert_depth, structure_thresh, black_expansion, min_width, deep_threshold, api_key, api_url):
     """
     Process flood estimation using surface map as depth proxy.
     
@@ -140,7 +140,7 @@ def process_flood_surface(image, surface_map, model_path, channel_mode, invert_d
         surface_map = cv2.resize(surface_map, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
 
     # Run Inference
-    results = model(image)
+    results = model(image, conf=confidence_thresh)
     
     if not results[0].masks:
         api_status = send_flood_report(api_url, api_key, "LOW", {"relative_height": 0.0, "max_vertical": 0})
@@ -291,6 +291,7 @@ def launch_app():
                     label="YOLO Model Path", 
                     value=''
                 )
+                confidence_thresh = gr.Slider(minimum=0.05, maximum=1.0, value=0.25, step=0.05, label="Detection Confidence Threshold (Model sensitivity)")
                 structure_thresh = gr.Slider(minimum=0.0, maximum=1.0, value=0.05, step=0.05, label="Surface Brightness Cutoff (Pixels darker than this are Ground)")
                 black_expansion = gr.Slider(minimum=0, maximum=50, value=7, step=1, label="Critical Area Expansion (px)")
                 min_width = gr.Slider(minimum=1, maximum=20, value=3, step=1, label="Min Vertical Structure Width (px)")
@@ -313,7 +314,7 @@ def launch_app():
         
         submit_btn.click(
             fn=process_flood_surface,
-            inputs=[input_img, surface_img, model_path_input, channel, invert, structure_thresh, black_expansion, min_width, deep_threshold, api_key_input, api_url_input],
+            inputs=[input_img, surface_img, model_path_input, confidence_thresh, channel, invert, structure_thresh, black_expansion, min_width, deep_threshold, api_key_input, api_url_input],
             outputs=[output_img, masked_depth_img, stats]
         )
     
